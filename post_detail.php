@@ -1,71 +1,72 @@
 <?php
 require_once 'functions.php';
 
+// Conecta ao banco de dados
 $conn = conectarBanco();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Verificar se é um novo comentário
-    if (isset($_POST['submit_comment'])) {
-        $post_id = isset($_POST['post_id']) ? $_POST['post_id'] : '';
-        $comment_username = isset($_POST['comment_username']) ? $_POST['comment_username'] : '';
-        $comment_message = isset($_POST['comment_message']) ? $_POST['comment_message'] : '';
+// Obtém o ID da postagem da URL
+if (isset($_GET['post_id'])) {
+    $postId = $_GET['post_id'];
 
-        // Inserir comentário no banco de dados
-        $stmt_comment = $conn->prepare("INSERT INTO comments (post_id, username, message) VALUES (:post_id, :username, :message)");
-        $stmt_comment->bindParam(':post_id', $post_id, PDO::PARAM_INT);
-        $stmt_comment->bindParam(':username', $comment_username, PDO::PARAM_STR);
-        $stmt_comment->bindParam(':message', $comment_message, PDO::PARAM_STR);
-        $stmt_comment->execute();
-    }
-}
+    // Obtém a postagem pelo ID
+    $post = getPostById($postId, $conn);
 
-// Verificar se o ID do post foi fornecido na URL
-if (isset($_GET['id'])) {
-    $post_id = $_GET['id'];
-
-    // Consultar detalhes do post
-    $stmt_post = $conn->prepare("SELECT * FROM posts WHERE id = :id");
-    $stmt_post->bindParam(':id', $post_id, PDO::PARAM_INT);
-    $stmt_post->execute();
-    $post = $stmt_post->fetch(PDO::FETCH_ASSOC);
-
+    // Se a postagem existe
     if ($post) {
-        // Exibir detalhes do post
-        echo "<h1>{$post['username']}</h1>";
-        echo "<p>{$post['text']}</p>";
-        echo "<img src='{$post['image_url']}' alt='Imagem do Post'>";
+        // Processa o formulário de comentário se enviado
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_comment'])) {
+            $commentUsername = isset($_POST['comment_username']) ? $_POST['comment_username'] : '';
+            $commentMessage = isset($_POST['comment_message']) ? $_POST['comment_message'] : '';
 
-        // Formulário para adicionar comentários
-        echo "<form method='POST' action='post_detail.php'>";
-        echo "<input type='hidden' name='post_id' value='{$post_id}'>";
-        echo "<label for='comment_username'>Seu Nome:</label>";
-        echo "<input type='text' name='comment_username' required>";
-        echo "<label for='comment_message'>Comentário:</label>";
-        echo "<textarea name='comment_message' required></textarea>";
-        echo "<button type='submit' name='submit_comment'>Comentar</button>";
-        echo "</form>";
-
-        // Consultar e exibir comentários relacionados ao post
-        $stmt_comments = $conn->prepare("SELECT * FROM comments WHERE post_id = :post_id");
-        $stmt_comments->bindParam(':post_id', $post_id, PDO::PARAM_INT);
-        $stmt_comments->execute();
-        $comments = $stmt_comments->fetchAll(PDO::FETCH_ASSOC);
-
-        if ($comments) {
-            echo "<div id='comments-section'>";
-            echo "<h2>Comentários</h2>";
-            foreach ($comments as $comment) {
-                echo "<div class='comment'>";
-                echo "<p>{$comment['username']} diz:</p>";
-                echo "<p>{$comment['message']}</p>";
-                echo "</div>";
-            }
-            echo "</div>";
+            // Adiciona o comentário
+            addComment($conn, $postId, $commentUsername, $commentMessage);
         }
+
+        // Obtém os comentários da postagem
+        $comments = getCommentsByPostId($postId, $conn);
+        ?>
+
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Post Details</title>
+            <link rel="stylesheet" href="style.css">
+        </head>
+        <body>
+
+        <div class="post-details">
+            <h2><?php echo $post['username']; ?></h2>
+            <p><?php echo $post['message']; ?></p>
+            <img src="<?php echo $post['image_url']; ?>" alt="Imagem da Postagem">
+
+            <h3>Comentários</h3>
+            <ul>
+                <?php foreach ($comments as $comment) : ?>
+                    <li><?php echo "{$comment['username']}: {$comment['message']}"; ?></li>
+                <?php endforeach; ?>
+            </ul>
+
+            <form method="post">
+                <label for="comment_username">Your Name:</label>
+                <input type="text" id="comment_username" name="comment_username" required>
+
+                <label for="comment_message">Comment:</label>
+                <textarea id="comment_message" name="comment_message" rows="4" required></textarea>
+
+                <button type="submit" name="submit_comment">Add Comment</button>
+            </form>
+        </div>
+
+        </body>
+        </html>
+
+        <?php
     } else {
-        echo "Post não encontrado.";
+        echo "<p>Postagem não encontrada.</p>";
     }
 } else {
-    echo "ID do post não fornecido.";
+    echo "<p>ID da postagem não fornecido.</p>";
 }
 ?>

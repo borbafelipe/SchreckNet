@@ -3,28 +3,50 @@ require_once 'functions.php';
 
 $conn = conectarBanco();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_post'])) {
-    $stmt = $conn->prepare("INSERT INTO posts (username, message, image_url) VALUES (:username, :message, :image_url)");
-    $stmt->bindParam(':username', $_POST['username'], PDO::PARAM_STR);
-    $stmt->bindParam(':message', $_POST['message'], PDO::PARAM_STR);
-    $stmt->bindParam(':image_url', $_POST['image_url'], PDO::PARAM_STR);
-    $stmt->execute();
+// Inicia a sessão
+if (session_status() == PHP_SESSION_NONE) {
+    session_start();}
+
+// Verifica se o formulário de postagem foi enviado
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['submit_post'])) {
+        $image_url = isset($_POST['image_url']) ? $_POST['image_url'] : '';
+
+        $stmt = $conn->prepare("INSERT INTO posts (username, message, image_url) VALUES (:username, :message, :image_url)");
+        $stmt->bindParam(':username', $_POST['username'], PDO::PARAM_STR);
+        $stmt->bindParam(':message', $_POST['message'], PDO::PARAM_STR);
+        $stmt->bindParam(':image_url', $image_url, PDO::PARAM_STR);
+        $stmt->execute();
+
+        // Atualiza a última postagem exibida
+        $_SESSION['lastDisplayedPost'] = $conn->lastInsertId();
+        
+        header("Location: index.php");
+    }
+
+    // Restante do código para comentários
 }
 
-$sql_posts = "SELECT * FROM posts ORDER BY id DESC";
-$result_posts = $conn->query($sql_posts);
-?>
+// Obtém a última postagem exibida
+$lastDisplayedPost = isset($_SESSION['lastDisplayedPost']) ? $_SESSION['lastDisplayedPost'] : 0;
 
+// Obtém todas as postagens do banco de dados a partir da última exibida
+$sql_posts = "SELECT * FROM posts WHERE id > :lastDisplayedPost ORDER BY id DESC";
+$stmt_posts = $conn->prepare($sql_posts);
+$stmt_posts->bindParam(':lastDisplayedPost', $lastDisplayedPost, PDO::PARAM_INT);
+$stmt_posts->execute();
+$result_posts = $stmt_posts->fetchAll(PDO::FETCH_ASSOC);
+
+// Exibe as postagens na página
+?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SchreckNet</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
     <header>
         <h1>SchreckNet</h1>
@@ -32,41 +54,34 @@ $result_posts = $conn->query($sql_posts);
     </header>
 
     <section id="user-actions">
-        <form method="post" action="">
+        <form method="post">
             <label for="username">Username:</label>
-            <input type="text" name="username" required>
+            <input type="text" id="username" name="username" required>
 
             <label for="message">Message:</label>
-            <textarea name="message" required></textarea>
+            <textarea id="message" name="message" rows="4" required></textarea>
 
             <label for="image_url">Image URL:</label>
-            <input type="text" name="image_url">
+            <input type="url" id="image_url" name="image_url">
 
-            <button type="submit" name="submit_post">Postar</button>
+            <button type="submit" name="submit_post">Post</button>
         </form>
     </section>
 
-    <div id="posts">
-        <?php
-        while ($row = $result_posts->fetch(PDO::FETCH_ASSOC)) {
-            $comments_count = obterContadorComentarios($conn, $row['id']);
-
-            echo '<div class="post-thumbnail">';
-            echo '<img src="' . $row['image_url'] . '" alt="Post Image">';
-            echo '<div class="post-content">';
-            echo '<p>Usuário: ' . $row['username'] . '</p>';
-            echo '<p>Mensagem: ' . $row['message'] . '</p>';
-            echo '<div class="post-comments">' . $comments_count . ' Comentários</div>';
-            echo '<a href="post_detail.php?id=' . $row['id'] . '">Detalhes</a>';
-            echo '</div>';
-            echo '</div>';
-        }
-        ?>
-    </div>
+    <section id="posts">
+        <?php foreach ($result_posts as $row) : ?>
+            <div class="post-thumbnail">
+                <img src="<?php echo $row['image_url']; ?>" alt="Post Image">
+                <p><strong><?php echo $row['username']; ?></strong></p>
+                <p><?php echo $row['message']; ?></p>
+                <a href="post_detail.php?post_id=<?php echo $row['id']; ?>" class="expand-button">Details</a>
+                <p>ID: <?php echo $row['id']; ?></p>
+            </div>
+        <?php endforeach; ?>
+    </section>
 
     <footer>
-        <p>&copy; 2023 SchreckNet. Todos os direitos reservados.</p>
+        &copy; 2023 SchreckNet
     </footer>
 </body>
-
 </html>
